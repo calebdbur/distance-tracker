@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Distance Tracker</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 2rem; }
+    #distance { font-size: 2rem; margin-top: 20px; }
+    #status { margin-top: 1rem; color: gray; }
+    button { padding: 10px 20px; font-size: 1rem; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Distance Tracker</h1>
+  <p>Enter your name (e.g., "personA" or "personB"):</p>
+  <input type="text" id="username" placeholder="Your name" />
+  <button id="startBtn">Start Tracking</button>
+
+  <div id="distance"></div>
+  <div id="status"></div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    // Import Firebase modules from CDN
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+    // Your Firebase config — REPLACE with your config here:
+    const firebaseConfig = {
+      apiKey: "AIzaSyCZ3vcU7S8Fc_nVnZpcqrrK_n7nDwQjLd0",
+      authDomain: "distance-app-2711b.firebaseapp.com",
+      projectId: "distance-app-2711b",
+      storageBucket: "distance-app-2711b.appspot.com",
+      messagingSenderId: "612438500452",
+      appId: "1:612438500452:web:f97f0f321d87d08367ab71",
+      measurementId: "G-PKGTG4G5X2"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Haversine formula to calculate straight-line distance (in miles)
+    function getDistanceFromLatLonInMiles(lat1, lon1, lat2, lon2) {
+      function deg2rad(deg) {
+        return deg * (Math.PI/180);
+      }
+      const R = 3959; // Radius of the earth in miles
+      const dLat = deg2rad(lat2 - lat1);
+      const dLon = deg2rad(lon2 - lon1);
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2)
+        ;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+      const d = R * c; // Distance in miles
+      return d;
+    }
+
+    let userName = "";
+    let myLocation = null;
+    let otherLocation = null;
+
+    const distanceDiv = document.getElementById("distance");
+    const statusDiv = document.getElementById("status");
+    const usernameInput = document.getElementById("username");
+    const startBtn = document.getElementById("startBtn");
+
+    startBtn.onclick = () => {
+      userName = usernameInput.value.trim();
+      if (!userName) {
+        alert("Please enter your name.");
+        return;
+      }
+      if (userName !== "personA" && userName !== "personB") {
+        alert('Name must be "personA" or "personB" exactly.');
+        return;
+      }
+      startTracking();
+      startBtn.disabled = true;
+      usernameInput.disabled = true;
+    };
+
+    function startTracking() {
+      if (!navigator.geolocation) {
+        statusDiv.textContent = "Geolocation is not supported by your browser.";
+        return;
+      }
+
+      statusDiv.textContent = "Getting your location...";
+
+      // Watch position (updates location continuously)
+      navigator.geolocation.watchPosition(async (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        myLocation = { lat, lon };
+
+        statusDiv.textContent = `Your location updated: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+
+        // Save your location in Firestore
+        await setDoc(doc(db, "locations", userName), {
+          latitude: lat,
+          longitude: lon,
+          timestamp: Date.now()
+        });
+
+        calculateAndDisplayDistance();
+
+      }, (err) => {
+        statusDiv.textContent = "Error getting location: " + err.message;
+      }, {
+        enableHighAccuracy: true,
+        maximumAge: 10000,
+        timeout: 10000
+      });
+
+      // Listen for the other person's location changes
+      const otherUser = userName === "personA" ? "personB" : "personA";
+      onSnapshot(doc(db, "locations", otherUser), (docSnap) => {
+        if (docSnap.exists()) {
+          otherLocation = {
+            lat: docSnap.data().latitude,
+            lon: docSnap.data().longitude
+          };
+          calculateAndDisplayDistance();
+        } else {
+          statusDiv.textContent = `Waiting for ${otherUser} location...`;
+        }
+      });
+    }
+
+    function calculateAndDisplayDistance() {
+      if (myLocation && otherLocation) {
+        const dist = getDistanceFromLatLonInMiles(
+          myLocation.lat, myLocation.lon,
+          otherLocation.lat, otherLocation.lon
+        );
+        distanceDiv.textContent = `Distance between you: ${dist.toFixed(2)} miles`;
+      }
+    }
+  </script>
+</body>
+</html>

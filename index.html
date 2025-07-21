@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Caleb & Emily Distance Tracker</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #1e1e1e;
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      text-align: center;
+    }
+    input, button {
+      margin: 10px;
+      padding: 15px;
+      font-size: 1.2rem;
+      border-radius: 8px;
+      border: none;
+    }
+    input {
+      width: 200px;
+    }
+    button {
+      background: #4caf50;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #45a049;
+    }
+    #distance {
+      font-size: 2rem;
+      margin-top: 20px;
+    }
+    #status, #lastUpdated {
+      margin-top: 10px;
+      color: #bbb;
+    }
+  </style>
+</head>
+<body>
+  <h1>Caleb & Emily Distance</h1>
+  <p>Who are you?</p>
+  <input type="text" id="username" placeholder="Caleb or Emily">
+  <button id="startBtn">Start Tracking</button>
+
+  <div id="distance"></div>
+  <div id="lastUpdated"></div>
+  <div id="status"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
+    import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCZ3vcU7S8Fc_nVnZpcqrrK_n7nDwQjLd0",
+      authDomain: "distance-app-2711b.firebaseapp.com",
+      projectId: "distance-app-2711b",
+      storageBucket: "distance-app-2711b.appspot.com",
+      messagingSenderId: "612438500452",
+      appId: "1:612438500452:web:f97f0f321d87d08367ab71"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    function haversine(lat1, lon1, lat2, lon2) {
+      const R = 3959;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat/2) ** 2 + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    let myLocation = null;
+    let otherLocation = null;
+    let username = "";
+
+    const distanceDiv = document.getElementById("distance");
+    const statusDiv = document.getElementById("status");
+    const lastUpdatedDiv = document.getElementById("lastUpdated");
+    const usernameInput = document.getElementById("username");
+    const startBtn = document.getElementById("startBtn");
+
+    startBtn.onclick = () => {
+      username = usernameInput.value.trim();
+      if (username !== "Caleb" && username !== "Emily") {
+        alert('Please enter either "Caleb" or "Emily".');
+        return;
+      }
+      usernameInput.disabled = true;
+      startBtn.disabled = true;
+      startTracking();
+    };
+
+    function startTracking() {
+      if (!navigator.geolocation) {
+        statusDiv.textContent = "Geolocation not supported.";
+        return;
+      }
+      statusDiv.textContent = "Tracking your location...";
+      navigator.geolocation.watchPosition(async pos => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        myLocation = { lat, lon };
+        statusDiv.textContent = `Your location: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+        await setDoc(doc(db, "locations", username), {
+          latitude: lat,
+          longitude: lon,
+          timestamp: Date.now()
+        });
+        updateDistance();
+      }, err => {
+        statusDiv.textContent = "Error: " + err.message;
+      }, { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 });
+
+      const otherUser = username === "Caleb" ? "Emily" : "Caleb";
+      onSnapshot(doc(db, "locations", otherUser), docSnap => {
+        if (docSnap.exists()) {
+          otherLocation = {
+            lat: docSnap.data().latitude,
+            lon: docSnap.data().longitude
+          };
+          const timeAgo = Math.round((Date.now() - docSnap.data().timestamp) / 60000);
+          lastUpdatedDiv.textContent = `Last updated ${timeAgo} min ago`;
+          updateDistance();
+        } else {
+          lastUpdatedDiv.textContent = `${otherUser}'s location not available yet.`;
+        }
+      });
+    }
+
+    function updateDistance() {
+      if (myLocation && otherLocation) {
+        const dist = haversine(myLocation.lat, myLocation.lon, otherLocation.lat, otherLocation.lon);
+        distanceDiv.textContent = `Distance between you: ${dist.toFixed(2)} miles`;
+      }
+    }
+  </script>
+</body>
+</html>
